@@ -1,0 +1,68 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+*.dll
+*.dylib
+*.lib
+*.exp
+*.obj
+.Python
+
+# ---- Cython / C build artifacts ----
+monotonic_align/core.c
+monotonic_align/build/
+*.o
+*.a
+*.out
+
+# ---- Distribution / packaging ----
+build/
+dist/
+*.egg-info/
+.eggs/
+*.whl
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- Test / lint / cache ----
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.cache/
+
+# ---- IDE / OS ----
+.idea/workspace.xml
+.idea/usage.statistics.xml
+.idea/shelf/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ---- Logs ----
+*.log
+
+# ---- Project runtime / generated data ----
+pretrained_models/
+OUTPUT_MODEL/
+checkpoints/
+custom_character_voice/
+raw_audio/
+video_data/
+denoised_audio/
+segmented_character_voice/
+separated/
+sampled_audio4ft/
+sampled_audio4ft.txt
+sampled_audio4ft_v2.zip
+long_character_anno.txt
+short_character_anno.txt
+*.pth

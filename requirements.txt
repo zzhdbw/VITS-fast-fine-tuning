@@ -1,13 +1,13 @@
 Cython==0.29.21
 librosa==0.9.2
 matplotlib==3.3.1
-scikit-learn==1.0.2
+# scikit-learn==1.0.2
 scipy
-numpy==1.22
+numpy==1.26.0
 tensorboard
-torch==2.1.2
-torchvision==0.16.2
-torchaudio==2.1.2
+# torch==2.6.0
+# torchvision==0.16.2
+# torchaudio==2.6.0
 unidecode
 pyopenjtalk-prebuilt
 jamo
@@ -22,5 +22,5 @@ indic_transliteration==2.3.37
 num_thai==0.0.5
 opencc==1.1.1
 demucs
-git+https://github.com/openai/whisper.git 
+# git+https://github.com/openai/whisper.git 
 gradio
