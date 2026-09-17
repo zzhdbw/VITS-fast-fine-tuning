@@ -23,6 +23,8 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Dict, List, Sequence, Tuple
 
+from tqdm import tqdm
+
 from common import CLEANER_NAMES, LANG_TAGS, RECIPE_DIR, normalize_lab_text, read_jsonl, write_json, write_jsonl
 
 
@@ -109,6 +111,7 @@ def main() -> None:
 
     good: List[Dict[str, Any]] = []
     errors: List[str] = []
+    progress = tqdm(total=len(rows), desc="[clean]", unit="row", dynamic_ncols=True)
 
     def consume(batch_results: Sequence[Tuple[Dict[str, Any], str]]) -> None:
         for row, error in batch_results:
@@ -116,6 +119,7 @@ def main() -> None:
                 errors.append(f"{row.get('src_lab')}: {error}")
             else:
                 good.append(row)
+        progress.update(len(batch_results))
 
     if args.workers <= 1:
         for batch in batches:
@@ -136,6 +140,9 @@ def main() -> None:
                 futures = [executor.submit(worker, batch) for batch in batches]
                 for future in as_completed(futures):
                     consume(future.result())
+
+    progress.set_postfix(good=len(good), errors=len(errors))
+    progress.close()
 
     if not good:
         raise RuntimeError("No text was successfully cleaned.")
