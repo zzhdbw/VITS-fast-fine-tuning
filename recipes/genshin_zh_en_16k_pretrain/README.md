@@ -264,6 +264,7 @@ python finetune_speaker_v2.py \
 - `--grad_clip 500`：按梯度范数裁剪，抑制大尖峰。
 - `--warmup_steps 2000`：前 2000 个 optimizer step 线性 warmup。
 - `--num_workers 8`：DataLoader worker 数；大规模数据时比默认 2 更不容易卡 I/O。
+- `config.json` 里的 `train.eval_audio_samples`：每次 eval 记录多少个 `gen/audio` / `gt/audio` 样本，默认 5。
 
 因为这里指定的是：
 

@@ -342,22 +342,29 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
 
 def evaluate(hps, generator, eval_loader, writer_eval):
     generator.eval()
+    num_audio = int(getattr(hps.train, "eval_audio_samples", 4))
     with torch.no_grad():
+      selected = 0
       for batch_idx, (x, x_lengths, spec, spec_lengths, y, y_lengths, speakers) in enumerate(eval_loader):
         x, x_lengths = x.cuda(0), x_lengths.cuda(0)
         spec, spec_lengths = spec.cuda(0), spec_lengths.cuda(0)
         y, y_lengths = y.cuda(0), y_lengths.cuda(0)
         speakers = speakers.cuda(0)
 
-        # remove else
-        x = x[:1]
-        x_lengths = x_lengths[:1]
-        spec = spec[:1]
-        spec_lengths = spec_lengths[:1]
-        y = y[:1]
-        y_lengths = y_lengths[:1]
-        speakers = speakers[:1]
+        selected = min(num_audio, x.size(0))
+        x = x[:selected]
+        x_lengths = x_lengths[:selected]
+        spec = spec[:selected]
+        spec_lengths = spec_lengths[:selected]
+        y = y[:selected]
+        y_lengths = y_lengths[:selected]
+        speakers = speakers[:selected]
         break
+
+      if selected == 0:
+        generator.train()
+        return
+
       y_hat, attn, mask, *_ = generator.module.infer(x, x_lengths, speakers, max_len=1000)
       y_hat_lengths = mask.sum([1,2]).long() * hps.data.hop_length
 
@@ -378,15 +385,19 @@ def evaluate(hps, generator, eval_loader, writer_eval):
         hps.data.mel_fmin,
         hps.data.mel_fmax
       )
+
     image_dict = {
       "gen/mel": utils.plot_spectrogram_to_numpy(y_hat_mel[0].cpu().numpy())
     }
-    audio_dict = {
-      "gen/audio": y_hat[0,:,:y_hat_lengths[0]]
-    }
+    audio_dict = {}
+    for i in range(selected):
+      key = "gen/audio" if i == 0 else f"gen/audio_{i}"
+      audio_dict[key] = y_hat[i,:,:y_hat_lengths[i]]
     if global_step == 0:
       image_dict.update({"gt/mel": utils.plot_spectrogram_to_numpy(mel[0].cpu().numpy())})
-      audio_dict.update({"gt/audio": y[0,:,:y_lengths[0]]})
+      for i in range(selected):
+        key = "gt/audio" if i == 0 else f"gt/audio_{i}"
+        audio_dict[key] = y[i,:,:y_lengths[i]]
 
     utils.summarize(
       writer=writer_eval,

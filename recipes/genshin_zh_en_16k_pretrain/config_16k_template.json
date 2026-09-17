@@ -20,7 +20,8 @@
     "c_kl": 1.0,
     "grad_clip": 500.0,
     "warmup_steps": 2000,
-    "num_workers": 8
+    "num_workers": 8,
+    "eval_audio_samples": 5
   },
   "data": {
     "training_files": "",
