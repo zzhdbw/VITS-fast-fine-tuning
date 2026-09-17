@@ -34,7 +34,7 @@ cd /mnt/afs/zzh/code/VITS-fast-fine-tuning
 # ======================== Step 3: clean text ========================
 .venv/bin/python recipes/genshin_zh_en_16k_pretrain/02_clean_text.py \
   --data-dir recipes/genshin_zh_en_16k_pretrain/data/genshin_zh_en_16k \
-  --workers 8
+  --workers 64
 
 # ======================== Step 4: make config =======================
 .venv/bin/python recipes/genshin_zh_en_16k_pretrain/03_make_config.py \
@@ -46,6 +46,8 @@ cd /mnt/afs/zzh/code/VITS-fast-fine-tuning
 #   recipes/genshin_zh_en_16k_pretrain/output/genshin_zh_en_16k/nohup_train.log
 #   recipes/genshin_zh_en_16k_pretrain/output/genshin_zh_en_16k/train.pid
 # 暂时不训练：把下面整段 Step 5 注释掉。
+# 启用 SwanLab 时可在下面命令中加：
+#   --use_swanlab True --swanlab_project vits-fast-fine-tuning --swanlab_mode local
 export CUDA_VISIBLE_DEVICES=0,1,4,5
 mkdir -p recipes/genshin_zh_en_16k_pretrain/output/genshin_zh_en_16k
 nohup .venv/bin/python -u finetune_speaker_v2.py \
@@ -53,11 +55,14 @@ nohup .venv/bin/python -u finetune_speaker_v2.py \
   -c recipes/genshin_zh_en_16k_pretrain/data/genshin_zh_en_16k/config.json \
   --max_epochs 100 \
   --preserved 50 \
-  --num_workers 8 \
+  --num_workers 16 \
   --grad_clip 500 \
   --warmup_steps 2000 \
   --train_with_pretrained_model False \
   --drop_speaker_embed False \
+  --use_swanlab True \
+  --swanlab_project vits-fast-fine-tuning-pretrain \
+  --swanlab_mode online \
   > recipes/genshin_zh_en_16k_pretrain/output/genshin_zh_en_16k/nohup_train.log 2>&1 &
 echo $! > recipes/genshin_zh_en_16k_pretrain/output/genshin_zh_en_16k/train.pid
 echo "Training started in background."
