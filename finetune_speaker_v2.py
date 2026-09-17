@@ -17,6 +17,11 @@ from tqdm import tqdm
 import librosa
 import logging
 
+try:
+    import swanlab
+except ImportError:
+    swanlab = None
+
 logging.getLogger('numba').setLevel(logging.WARNING)
 
 import commons
@@ -58,12 +63,38 @@ def main():
 def run(rank, n_gpus, hps):
   global global_step
   symbols = hps['symbols']
+  swanlab_writer = None
   if rank == 0:
     logger = utils.get_logger(hps.model_dir)
     logger.info(hps)
     utils.check_git_hash(hps.model_dir)
     writer = SummaryWriter(log_dir=hps.model_dir)
     writer_eval = SummaryWriter(log_dir=os.path.join(hps.model_dir, "eval"))
+
+    if getattr(hps, "use_swanlab", False):
+      if swanlab is None:
+        raise RuntimeError("hps.use_swanlab=True but swanlab is not installed")
+      swanlab_logdir = getattr(hps, "swanlab_logdir", None) or os.path.join(hps.model_dir, "swanlab")
+      swanlab.init(
+        project=getattr(hps, "swanlab_project", "vits-fast-fine-tuning"),
+        name=getattr(hps, "swanlab_name", os.path.basename(hps.model_dir)),
+        mode=getattr(hps, "swanlab_mode", "online"),
+        workspace=getattr(hps, "swanlab_workspace", None),
+        log_dir=swanlab_logdir,
+        config={
+          "model_dir": hps.model_dir,
+          "sampling_rate": hps.data.sampling_rate,
+          "n_speakers": hps.data.n_speakers,
+          "batch_size": hps.train.batch_size,
+          "learning_rate": hps.train.learning_rate,
+          "max_epochs": hps.max_epochs,
+          "grad_clip": hps.grad_clip,
+          "warmup_steps": hps.warmup_steps,
+        },
+      )
+      swanlab_writer = utils.SwanLabWriter()
+      writer = utils.MultiWriter([writer, swanlab_writer])
+      writer_eval = utils.MultiWriter([writer_eval, swanlab_writer])
 
   # Use gloo backend on Windows for Pytorch
   dist.init_process_group(backend=  'gloo' if os.name == 'nt' else 'nccl', init_method='env://', world_size=n_gpus, rank=rank)
@@ -149,15 +180,19 @@ def run(rank, n_gpus, hps):
 
   scaler = GradScaler(enabled=hps.train.fp16_run)
 
-  for epoch in range(epoch_str, hps.train.epochs + 1):
-    if rank==0:
-      train_and_evaluate(rank, epoch, hps, [net_g, net_d], [optim_g, optim_d], [scheduler_g, scheduler_d], scaler, [train_loader, eval_loader], logger, [writer, writer_eval])
-    else:
-      train_and_evaluate(rank, epoch, hps, [net_g, net_d], [optim_g, optim_d], [scheduler_g, scheduler_d], scaler, [train_loader, None], None, None)
-    # LR is scheduled manually in train_and_evaluate so warmup_steps can be
-    # applied at the optimizer-step level.
-    # scheduler_g.step()
-    # scheduler_d.step()
+  try:
+    for epoch in range(epoch_str, hps.train.epochs + 1):
+      if rank==0:
+        train_and_evaluate(rank, epoch, hps, [net_g, net_d], [optim_g, optim_d], [scheduler_g, scheduler_d], scaler, [train_loader, eval_loader], logger, [writer, writer_eval])
+      else:
+        train_and_evaluate(rank, epoch, hps, [net_g, net_d], [optim_g, optim_d], [scheduler_g, scheduler_d], scaler, [train_loader, None], None, None)
+      # LR is scheduled manually in train_and_evaluate so warmup_steps can be
+      # applied at the optimizer-step level.
+      # scheduler_g.step()
+      # scheduler_d.step()
+  finally:
+    if rank == 0 and swanlab_writer is not None:
+      swanlab_writer.finish()
 
 
 def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loaders, logger, writers):

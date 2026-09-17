@@ -274,6 +274,51 @@ python finetune_speaker_v2.py \
 
 所以是**从随机初始化开始预训练**，不是加载已有的 22.05 kHz 预训练模型微调。
 
+## SwanLab 支持
+
+项目已支持同时写入 TensorBoard 和 SwanLab。
+
+安装：
+
+```bash
+pip install swanlab
+```
+
+在 `config.json` 的 `train` 中开启：
+
+```json
+{
+  "train": {
+    "use_swanlab": true,
+    "swanlab_project": "vits-fast-fine-tuning",
+    "swanlab_name": "genshin_zh_en_16k",
+    "swanlab_mode": "online",
+    "swanlab_workspace": null,
+    "swanlab_logdir": null
+  }
+}
+```
+
+也可以在命令行覆盖：
+
+```bash
+--use_swanlab True
+--swanlab_project vits-fast-fine-tuning
+--swanlab_name genshin_zh_en_16k
+--swanlab_mode local
+```
+
+`swanlab_mode` 可选：
+
+```text
+online    # 登录后上传云端
+local     # 本地记录
+offline   # 离线记录
+禁用：use_swanlab False
+```
+
+开启后 `utils.summarize` 里的 scalar、image、audio 会同时写到 TensorBoard 和 SwanLab。
+
 ## 16 kHz 输出保证
 
 最终模型输出采样率由 `config.json` 决定：

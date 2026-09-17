@@ -13,6 +13,10 @@ import regex as re
 MATPLOTLIB_FLAG = False
 
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+# SwanLab uses urllib3; at DEBUG level it prints every HTTPS heartbeat as a
+# noisy "Starting new HTTPS connection" line.  Keep urllib3 at WARNING so
+# training logs stay readable while SwanLab still works normally.
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 logger = logging
 
 
@@ -193,6 +197,92 @@ def save_checkpoint(model, optimizer, learning_rate, iteration, checkpoint_path)
                 'learning_rate': learning_rate}, checkpoint_path)
 
 
+class SwanLabWriter:
+    """Minimal TensorBoard-like writer for SwanLab."""
+
+    def __init__(self):
+        import swanlab
+        self.swanlab = swanlab
+
+    @staticmethod
+    def _to_numpy(value):
+        if isinstance(value, np.ndarray):
+            return value
+        if torch.is_tensor(value):
+            return value.detach().cpu().numpy()
+        if hasattr(value, "numpy"):
+            return value.numpy()
+        return np.asarray(value)
+
+    def add_scalar(self, tag, value, global_step):
+        if torch.is_tensor(value):
+            value = value.detach().cpu().item()
+        elif hasattr(value, "item"):
+            value = value.item()
+        self.swanlab.log({tag: value}, step=global_step)
+
+    def add_histogram(self, tag, values, global_step):
+        # SwanLab has no direct histogram transform in this version.  Histograms
+        # are not used by the training script, so keep this a no-op.
+        return
+
+    def add_image(self, tag, img, global_step, dataformats="HWC"):
+        arr = self._to_numpy(img)
+        if dataformats == "CHW":
+            arr = np.transpose(arr, (1, 2, 0))
+        if arr.dtype != np.uint8:
+            if arr.size and arr.max() <= 1.0 and arr.min() >= -1.0:
+                arr = (arr * 255.0).clip(0, 255).astype(np.uint8)
+            else:
+                arr = arr.clip(0, 255).astype(np.uint8)
+        self.swanlab.log({tag: self.swanlab.Image(arr)}, step=global_step)
+
+    def add_audio(self, tag, audio, global_step, sample_rate=22050):
+        arr = self._to_numpy(audio)
+        if arr.ndim > 1:
+            arr = np.squeeze(arr)
+        if arr.dtype != np.float32:
+            arr = arr.astype(np.float32)
+        arr = np.clip(arr, -1.0, 1.0)
+        self.swanlab.log(
+            {tag: self.swanlab.Audio(arr, sample_rate=int(sample_rate))},
+            step=global_step,
+        )
+
+    def finish(self):
+        self.swanlab.finish()
+
+
+class MultiWriter:
+    """Forward TensorBoard-like calls to multiple writers."""
+
+    def __init__(self, writers):
+        self.writers = [w for w in writers if w is not None]
+
+    def add_scalar(self, *args, **kwargs):
+        for writer in self.writers:
+            writer.add_scalar(*args, **kwargs)
+
+    def add_histogram(self, *args, **kwargs):
+        for writer in self.writers:
+            writer.add_histogram(*args, **kwargs)
+
+    def add_image(self, *args, **kwargs):
+        for writer in self.writers:
+            writer.add_image(*args, **kwargs)
+
+    def add_audio(self, *args, **kwargs):
+        for writer in self.writers:
+            writer.add_audio(*args, **kwargs)
+
+    def finish(self):
+        for writer in self.writers:
+            if hasattr(writer, "finish"):
+                writer.finish()
+            elif hasattr(writer, "close"):
+                writer.close()
+
+
 def summarize(writer, global_step, scalars={}, histograms={}, images={}, audios={}, audio_sampling_rate=22050):
     for k, v in scalars.items():
         writer.add_scalar(k, v, global_step)
@@ -324,6 +414,18 @@ def get_hparams(init=True):
                         help='Linear warmup steps. None uses train.warmup_steps from config.')
     parser.add_argument('--num_workers', type=int, default=None,
                         help='DataLoader workers per process. None uses train.num_workers from config.')
+    parser.add_argument('--use_swanlab', type=str2bool, default=None,
+                        help='Enable SwanLab logging. None uses train.use_swanlab from config.')
+    parser.add_argument('--swanlab_project', type=str, default=None,
+                        help='SwanLab project name.')
+    parser.add_argument('--swanlab_name', type=str, default=None,
+                        help='SwanLab run name.')
+    parser.add_argument('--swanlab_mode', type=str, default=None,
+                        help='SwanLab mode: online / local / offline / disabled.')
+    parser.add_argument('--swanlab_workspace', type=str, default=None,
+                        help='SwanLab workspace.')
+    parser.add_argument('--swanlab_logdir', type=str, default=None,
+                        help='SwanLab log directory.')
 
     args = parser.parse_args()
     model_dir = os.path.join("./", args.model)
@@ -364,6 +466,36 @@ def get_hparams(init=True):
         args.num_workers
         if args.num_workers is not None
         else int(getattr(hparams.train, "num_workers", 2))
+    )
+    hparams.use_swanlab = (
+        args.use_swanlab
+        if args.use_swanlab is not None
+        else bool(getattr(hparams.train, "use_swanlab", False))
+    )
+    hparams.swanlab_project = (
+        args.swanlab_project
+        if args.swanlab_project is not None
+        else (getattr(hparams.train, "swanlab_project", None) or "vits-fast-fine-tuning")
+    )
+    hparams.swanlab_name = (
+        args.swanlab_name
+        if args.swanlab_name is not None
+        else (getattr(hparams.train, "swanlab_name", None) or os.path.basename(model_dir))
+    )
+    hparams.swanlab_mode = (
+        args.swanlab_mode
+        if args.swanlab_mode is not None
+        else (getattr(hparams.train, "swanlab_mode", None) or "online")
+    )
+    hparams.swanlab_workspace = (
+        args.swanlab_workspace
+        if args.swanlab_workspace is not None
+        else getattr(hparams.train, "swanlab_workspace", None)
+    )
+    hparams.swanlab_logdir = (
+        args.swanlab_logdir
+        if args.swanlab_logdir is not None
+        else getattr(hparams.train, "swanlab_logdir", None)
     )
     return hparams
 
