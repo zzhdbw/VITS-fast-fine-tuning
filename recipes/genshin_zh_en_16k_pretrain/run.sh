@@ -11,9 +11,9 @@ cd /mnt/afs/zzh/code/VITS-fast-fine-tuning
   --dataset-root /mnt/afs/datasets/TTS/Genshin6.3 \
   --data-dir recipes/genshin_zh_en_16k_pretrain/data/genshin_zh_en_16k \
   --exclude-file recipes/genshin_zh_en_16k_pretrain/exclude_speakers.txt \
-  --min-utts 100 \
-  --max-speakers 20 \
-  --max-utts-per-speaker 300 \
+  --min-utts 20 \
+  --max-speakers 0 \
+  --max-utts-per-speaker 500 \
   --val-ratio 0.02 
 
 
