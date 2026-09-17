@@ -79,7 +79,7 @@ def run(rank, n_gpus, hps):
       rank=rank,
       shuffle=True)
   collate_fn = TextAudioSpeakerCollate()
-  train_loader = DataLoader(train_dataset, num_workers=2, shuffle=False, pin_memory=True,
+  train_loader = DataLoader(train_dataset, num_workers=hps.num_workers, shuffle=False, pin_memory=True,
       collate_fn=collate_fn, batch_sampler=train_sampler)
   # train_loader = DataLoader(train_dataset, batch_size=hps.train.batch_size, num_workers=2, shuffle=False, pin_memory=True,
   #                           collate_fn=collate_fn)
@@ -154,8 +154,10 @@ def run(rank, n_gpus, hps):
       train_and_evaluate(rank, epoch, hps, [net_g, net_d], [optim_g, optim_d], [scheduler_g, scheduler_d], scaler, [train_loader, eval_loader], logger, [writer, writer_eval])
     else:
       train_and_evaluate(rank, epoch, hps, [net_g, net_d], [optim_g, optim_d], [scheduler_g, scheduler_d], scaler, [train_loader, None], None, None)
-    scheduler_g.step()
-    scheduler_d.step()
+    # LR is scheduled manually in train_and_evaluate so warmup_steps can be
+    # applied at the optimizer-step level.
+    # scheduler_g.step()
+    # scheduler_d.step()
 
 
 def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loaders, logger, writers):
@@ -169,9 +171,25 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
   # train_loader.batch_sampler.set_epoch(epoch)
   global global_step
 
+  base_lr = float(hps.train.learning_rate)
+  lr_decay = float(hps.train.lr_decay)
+  grad_clip = float(getattr(hps, "grad_clip", 0.0))
+  warmup_steps = int(getattr(hps, "warmup_steps", 0))
+
   net_g.train()
   net_d.train()
   for batch_idx, (x, x_lengths, spec, spec_lengths, y, y_lengths, speakers) in enumerate(tqdm(train_loader)):
+    # Manual LR schedule: linear warmup for first warmup_steps optimizer steps,
+    # then ExponentialLR-equivalent decay per epoch.
+    if warmup_steps > 0 and global_step < warmup_steps:
+      current_lr = base_lr * float(global_step + 1) / float(warmup_steps)
+    else:
+      current_lr = base_lr * (lr_decay ** max(0, epoch - 1))
+    for param_group in optim_g.param_groups:
+      param_group['lr'] = current_lr
+    for param_group in optim_d.param_groups:
+      param_group['lr'] = current_lr
+
     x, x_lengths = x.cuda(rank, non_blocking=True), x_lengths.cuda(rank, non_blocking=True)
     spec, spec_lengths = spec.cuda(rank, non_blocking=True), spec_lengths.cuda(rank, non_blocking=True)
     y, y_lengths = y.cuda(rank, non_blocking=True), y_lengths.cuda(rank, non_blocking=True)
@@ -211,6 +229,8 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
     scaler.scale(loss_disc_all).backward()
     scaler.unscale_(optim_d)
     grad_norm_d = commons.clip_grad_value_(net_d.parameters(), None)
+    if grad_clip > 0:
+      torch.nn.utils.clip_grad_norm_(net_d.parameters(), grad_clip)
     scaler.step(optim_d)
 
     with autocast(enabled=hps.train.fp16_run):
@@ -228,6 +248,8 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
     scaler.scale(loss_gen_all).backward()
     scaler.unscale_(optim_g)
     grad_norm_g = commons.clip_grad_value_(net_g.parameters(), None)
+    if grad_clip > 0:
+      torch.nn.utils.clip_grad_norm_(net_g.parameters(), grad_clip)
     scaler.step(optim_g)
     scaler.update()
 
@@ -240,7 +262,15 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
           100. * batch_idx / len(train_loader)))
         logger.info([x.item() for x in losses] + [global_step, lr])
 
-        scalar_dict = {"loss/g/total": loss_gen_all, "loss/d/total": loss_disc_all, "learning_rate": lr, "grad_norm_g": grad_norm_g}
+        scalar_dict = {
+            "loss/g/total": loss_gen_all,
+            "loss/d/total": loss_disc_all,
+            "learning_rate": lr,
+            "grad_norm_g": grad_norm_g,
+            "grad_norm_d": grad_norm_d,
+            "grad_clip": grad_clip,
+            "warmup_steps": warmup_steps,
+        }
         scalar_dict.update({"loss/g/fm": loss_fm, "loss/g/mel": loss_mel, "loss/g/dur": loss_dur, "loss/g/kl": loss_kl})
 
         scalar_dict.update({"loss/g/{}".format(i): v for i, v in enumerate(losses_gen)})

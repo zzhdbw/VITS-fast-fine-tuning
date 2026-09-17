@@ -318,6 +318,12 @@ def get_hparams(init=True):
                         help='whether to train with pretrained model')
     parser.add_argument('--preserved', type=int, default=4,
                         help='Number of preserved models')
+    parser.add_argument('--grad_clip', type=float, default=None,
+                        help='Gradient norm clipping value. None uses train.grad_clip from config.')
+    parser.add_argument('--warmup_steps', type=int, default=None,
+                        help='Linear warmup steps. None uses train.warmup_steps from config.')
+    parser.add_argument('--num_workers', type=int, default=None,
+                        help='DataLoader workers per process. None uses train.num_workers from config.')
 
     args = parser.parse_args()
     model_dir = os.path.join("./", args.model)
@@ -344,6 +350,21 @@ def get_hparams(init=True):
     hparams.drop_speaker_embed = args.drop_speaker_embed
     hparams.train_with_pretrained_model = args.train_with_pretrained_model
     hparams.preserved = args.preserved
+    hparams.grad_clip = (
+        args.grad_clip
+        if args.grad_clip is not None
+        else float(getattr(hparams.train, "grad_clip", 0.0))
+    )
+    hparams.warmup_steps = (
+        args.warmup_steps
+        if args.warmup_steps is not None
+        else int(getattr(hparams.train, "warmup_steps", 0))
+    )
+    hparams.num_workers = (
+        args.num_workers
+        if args.num_workers is not None
+        else int(getattr(hparams.train, "num_workers", 2))
+    )
     return hparams
 
 
