@@ -30,10 +30,15 @@ recipes/genshin_zh_en_16k_pretrain/
 ├── 02_clean_text.py           # 清理 .lab 文本，生成 train.txt / val.txt
 ├── 03_make_config.py          # 生成最终 config.json
 ├── 04_infer.py                # 训练后合成音频试听
+├── infer.sh                   # 04_infer.py 的包装脚本
+├── compare_ckpts.sh           # 批量比较中文 checkpoint 试听
+├── compare_ckpts_mixed.sh     # 批量比较中英混读 checkpoint
+├── experiments/               # 实验说明与续训脚本
 ├── config_16k_template.json   # 16 kHz VITS 配置模板
 ├── exclude_speakers.txt       # 可编辑的音色排除名单（fnmatch 通配符）
 ├── run.sh                     # 统一入口脚本
-└── data/                      # 运行后生成的数据（已 gitignore）
+├── data/                      # 运行后生成的数据（已 gitignore）
+└── output/                    # 训练输出、checkpoint、试听 wav（已 gitignore）
 ```
 
 ## 使用 uv 虚拟环境
@@ -242,6 +247,24 @@ recipes/genshin_zh_en_16k_pretrain/output/genshin_zh_en_16k/infer/
 
 如果训练正在写 `G_latest.pth`，推理时读 checkpoint 可能偶发不完整，建议改用已经写好的 `G_xxx.pth`，或者等一次 eval 保存完成后再试。
 
+## 检查点对比
+
+训练中如果想比较不同 checkpoint 的音质，可以直接改脚本顶部的 `CKPTS`、`SPEAKER`、`MODEL_DIR` 和 `CONFIG`：
+
+```bash
+bash recipes/genshin_zh_en_16k_pretrain/compare_ckpts.sh
+bash recipes/genshin_zh_en_16k_pretrain/compare_ckpts_mixed.sh
+```
+
+输出默认写到：
+
+```text
+recipes/genshin_zh_en_16k_pretrain/output/genshin_zh_en_16k/compare_ckpts/
+recipes/genshin_zh_en_16k_pretrain/output/genshin_zh_en_16k/compare_ckpts_mixed/
+```
+
+这两个脚本只是调用 `04_infer.py`，默认使用 CPU 推理；如果 GPU 空闲，可以把脚本里的 `--device cpu` 改成 `--device cuda`。
+
 ## 训练
 
 Step 5 实际执行：
@@ -273,6 +296,14 @@ python finetune_speaker_v2.py \
 ```
 
 所以是**从随机初始化开始预训练**，不是加载已有的 22.05 kHz 预训练模型微调。
+
+## 低学习率续训实验
+
+从已有实验 checkpoint 继续训练、把学习率降到 `1e-4` 的实验脚本在：
+
+```text
+recipes/genshin_zh_en_16k_pretrain/experiments/lr1e-4/README.md
+```
 
 ## SwanLab 支持
 
