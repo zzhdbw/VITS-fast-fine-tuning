@@ -1,9 +1,10 @@
 # VITS Fast Fine-tuning
 
-这个仓库现在有两条使用路线：
+这个仓库现在有三条使用路线：
 
 1. **原神中文/英文 16 kHz 预训练配方**：从原神语音数据整理、重采样、清洗文本，到训练和试听，都在 `recipes/genshin_zh_en_16k_pretrain/` 下。
-2. **原来的 VITS 快速微调流程**：准备自己的音频或视频数据，基于 CJE / CJ / C 底模微调，然后做 TTS 或声线转换。
+2. **BZNSYP 中文单人 16 kHz 预训练配方**：使用 `/mnt/afs/datasets/TTS/BZNSYP` 做单人音色预训练，默认 1000 epoch。
+3. **原来的 VITS 快速微调流程**：准备自己的音频或视频数据，基于 CJE / CJ / C 底模微调，然后做 TTS 或声线转换。
 
 如果你是第一次用，建议先看第 1 条。它目前是仓库里最完整、最容易复现的一条链路。
 
@@ -54,7 +55,34 @@ bash recipes/genshin_zh_en_16k_pretrain/compare_ckpts_mixed.sh
 recipes/genshin_zh_en_16k_pretrain/experiments/lr1e-4/README.md
 ```
 
-## 路线二：原来的 VITS 快速微调
+## 路线二：BZNSYP 中文单人 16 kHz 预训练
+
+使用 `/mnt/afs/datasets/TTS/BZNSYP` 训练中文单人音色，默认 1000 个 epoch。
+
+BZNSYP 是纯中文数据集，所以配方使用 `chinese_cleaners` + 注音符号（Bopomofo）词表，不再使用多语言 IPA 词表。
+
+详细说明在：
+
+```text
+recipes/bznsyp_zh_16k_pretrain/README.md
+```
+
+常用入口：
+
+```bash
+# 默认执行：数据预处理 -> 1000 epoch 后台训练 -> 测试推理
+bash recipes/bznsyp_zh_16k_pretrain/run.sh
+```
+
+`run.sh` 里按 Step 1~3 直接写命令；只想做某一步时，把其他 Step 注释掉即可。
+
+训练完成后也可以单独推理：
+
+```bash
+bash recipes/bznsyp_zh_16k_pretrain/infer.sh "你好，这是 BZNSYP 单人音色。" test
+```
+
+## 路线三：原来的 VITS 快速微调
 
 原来的脚本还在：
 
@@ -171,6 +199,7 @@ bash recipes/genshin_zh_en_16k_pretrain/infer.sh --speaker 魔女M --text "你�
 ## 文档
 
 - `recipes/genshin_zh_en_16k_pretrain/README.md`：原神中英 16 kHz 预训练配方
+- `recipes/bznsyp_zh_16k_pretrain/README.md`：BZNSYP 中文单人 16 kHz 预训练配方
 - `DATA.MD`：微调数据格式
 - `LOCAL.md`：本地环境、编译、训练和推理
 

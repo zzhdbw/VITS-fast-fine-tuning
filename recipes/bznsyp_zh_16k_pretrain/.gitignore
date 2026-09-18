@@ -1,0 +1,5 @@
+# Recipe-generated data and outputs
+data/
+output/
+*.log
+*.pth
