@@ -1,99 +1,182 @@
-[中文文档请点击这里](https://github.com/Plachtaa/VITS-fast-fine-tuning/blob/main/README_ZH.md)
 # VITS Fast Fine-tuning
-This repo will guide you to add your own character voices, or even your own voice, into existing VITS TTS model
-to make it able to do the following tasks in less than 1 hour:  
 
-1. Many-to-many voice conversion between any characters you added & preset characters in the model.
-2. English, Japanese & Chinese Text-to-Speech synthesis with the characters you added & preset characters  
-  
+这个仓库现在有两条使用路线：
 
-Welcome to play around with the base models!  
-Chinese & English & Japanese：[![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/Plachta/VITS-Umamusume-voice-synthesizer) Author: Me  
+1. **原神中文/英文 16 kHz 预训练配方**：从原神语音数据整理、重采样、清洗文本，到训练和试听，都在 `recipes/genshin_zh_en_16k_pretrain/` 下。
+2. **原来的 VITS 快速微调流程**：准备自己的音频或视频数据，基于 CJE / CJ / C 底模微调，然后做 TTS 或声线转换。
 
-Chinese & Japanese：[![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/sayashi/vits-uma-genshin-honkai) Author: [SayaSS](https://github.com/SayaSS)  
+如果你是第一次用，建议先看第 1 条。它目前是仓库里最完整、最容易复现的一条链路。
 
-Chinese only：(No running huggingface spaces) Author: [Wwwwhy230825](https://github.com/Wwwwhy230825)
+## 路线一：原神中英 16 kHz 预训练
 
+详细说明在：
 
-### Currently Supported Tasks:
-- [x] Clone character voice from 10+ short audios
-- [x] Clone character voice from long audio(s) >= 3 minutes (one audio should contain single speaker only)
-- [x] Clone character voice from videos(s) >= 3 minutes (one video should contain single speaker only)
-- [x] Clone character voice from BILIBILI video links (one video should contain single speaker only)
-
-### Currently Supported Characters for TTS & VC:
-- [x] Any character you wish as long as you have their voices!
-(Note that voice conversion can only be conducted between any two speakers in the model)
-
-
-
-## Fine-tuning
-See [LOCAL.md](https://github.com/Plachtaa/VITS-fast-fine-tuning/blob/main/LOCAL.md) for local training guide.  
-Alternatively, you can perform fine-tuning on [Google Colab](https://colab.research.google.com/drive/1pn1xnFfdLK63gVXDwV4zCXfVeo8c-I-0?usp=sharing)
-
-
-### How long does it take? 
-1. Install dependencies (3 min)
-2. Choose pretrained model to start. The detailed differences between them are described in [Colab Notebook](https://colab.research.google.com/drive/1pn1xnFfdLK63gVXDwV4zCXfVeo8c-I-0?usp=sharing)
-3. Upload the voice samples of the characters you wish to add，see [DATA.MD](https://github.com/Plachtaa/VITS-fast-fine-tuning/blob/main/DATA_EN.MD) for detailed uploading options.
-4. Start fine-tuning. Time taken varies from 20 minutes ~ 2 hours, depending on the number of voices you uploaded.
-
-
-## Inference or Usage (Currently support Windows only)
-0. Remember to download your fine-tuned model!
-1. Download the latest release
-2. Put your model & config file into the folder `inference`, which are named `G_latest.pth` and `finetune_speaker.json`, respectively.
-3. The file structure should be as follows:
+```text
+recipes/genshin_zh_en_16k_pretrain/README.md
 ```
-inference
-├───inference.exe
-├───...
-├───finetune_speaker.json
-└───G_latest.pth
-```
-4. run `inference.exe`, the browser should pop up automatically.
-5. Note: you must install `ffmpeg` to enable voice conversion feature.
 
+这条路线大致做这些事：
 
-## Inference with CLI
-In this example, we will show how to run inference with the default pretrained model. We are now in the main repository directory.
-1. Create the necessary folders and download the necessary files.
+- 扫描 `/mnt/afs/datasets/TTS/Genshin6.3` 里的 `Chinese/` 和 `English/`
+- 每个音色目录只取一级目录下的 wav/lab，忽略子文件夹
+- 中英同名音色合并成一个 speaker
+- 重采样到 16 kHz 单声道 PCM16
+- 清洗成 `[ZH]` / `[EN]` 标签的 IPA 文本
+- 生成 16 kHz VITS 配置
+- 支持 DDP、TensorBoard、SwanLab、gradient clipping、warmup
+- 训练后可以用 `04_infer.py` 或 `infer.sh` 合成试听
+
+常用入口：
+
+```bash
+bash recipes/genshin_zh_en_16k_pretrain/run.sh
 ```
-cd monotonic_align/
-mkdir monotonic_align
+
+也可以直接看 `run.sh` 里的 Step 1 到 Step 6，按需要注释或修改。
+
+### 检查点对比与续训实验
+
+训练中或训练后可以用这些脚本试听不同 checkpoint：
+
+```bash
+# 比较 G_10000.pth ~ G_56000.pth
+bash recipes/genshin_zh_en_16k_pretrain/compare_ckpts.sh
+
+# 比较后期 checkpoint 的中英混说效果
+bash recipes/genshin_zh_en_16k_pretrain/compare_ckpts_mixed.sh
+```
+
+脚本顶部的 `MODEL_DIR`、`CONFIG`、`CKPTS` 可以按实际实验修改，输出会写到 `output/` 下（已 gitignore）。
+
+低学习率续训实验说明见：
+
+```text
+recipes/genshin_zh_en_16k_pretrain/experiments/lr1e-4/README.md
+```
+
+## 路线二：原来的 VITS 快速微调
+
+原来的脚本还在：
+
+```text
+finetune_speaker_v2.py
+preprocess_v2.py
+VC_inference.py
+cmd_inference.py
+```
+
+适用场景：
+
+- 有自己的角色音频或视频；
+- 想基于 CJE / CJ / C 预训练底模微调；
+- 想做 TTS 或声线转换。
+
+准备数据看：
+
+```text
+DATA.MD
+```
+
+本地安装、编译和训练流程看：
+
+```text
+LOCAL.md
+```
+
+## 环境
+
+系统依赖：
+
+- ffmpeg
+- cmake
+- gcc / g++
+- git
+
+Python 依赖：
+
+```bash
+pip install -r requirements.txt
+```
+
+当前仓库里的 `.venv` 使用 Python 3.11。  
+有一个坑：`requirements.txt` 里如果还是 `Cython==0.29.21`，在 Python 3.11 下编译 `monotonic_align` 会报 `longintrepr.h` 找不到。把 Cython 换成较新的版本即可：
+
+```bash
+pip install "Cython==0.29.36"
+```
+
+PyTorch 建议单独装和机器 CUDA 匹配的 GPU 版本。
+
+## 编译 monotonic_align
+
+原来的快速微调流程需要：
+
+```bash
+cd monotonic_align
+mkdir -p monotonic_align
 python setup.py build_ext --inplace
 cd ..
-mkdir pretrained_models
-# download data for fine-tuning
-wget https://huggingface.co/datasets/Plachta/sampled_audio4ft/resolve/main/sampled_audio4ft_v2.zip
-unzip sampled_audio4ft_v2.zip
 ```
 
-For your finetuned model you may need to create additional directories:
-```
-mkdir video_data
-mkdir raw_audio
-mkdir denoised_audio
-mkdir custom_character_voice
-mkdir segmented_character_voice
-```
-2. Download pretrained models. For example, trilingual model:
-```
-wget https://huggingface.co/spaces/Plachta/VITS-Umamusume-voice-synthesizer/resolve/main/pretrained_models/D_trilingual.pth -O ./pretrained_models/D_0.pth
-wget https://huggingface.co/spaces/Plachta/VITS-Umamusume-voice-synthesizer/resolve/main/pretrained_models/G_trilingual.pth -O ./pretrained_models/G_0.pth
-wget https://huggingface.co/spaces/Plachta/VITS-Umamusume-voice-synthesizer/resolve/main/configs/uma_trilingual.json -O ./configs/finetune_speaker.json
-```
-3. Activate your environment and run the following code:
-`python3 cmd_inference.py -m pretrained_models/G_0.pth -c configs/finetune_speaker.json -t 你好，训练员先生，很高兴见到你。 -s "派蒙 Paimon (Genshin Impact)" -l "简体中文"`
-You can choose another language, customize output folder, change text and character, but all these parameters you can see in the file `cmd_inference.py`.
-Below I'll show only how to change the character.
-4. To change the character please open config file (`configs/finetune_speaker.json`). There you can find dictionary `speakers`, where you'll be able to see full list of speakers. Just copy the name of the character you need use it instead of `"派蒙 Paimon (Genshin Impact)"`
-5. If you have success, you can find output `.wav` file in the `output/vits`
+验证：
 
+```bash
+python -c "from monotonic_align import maximum_path; print('ok')"
+```
 
-## Use in MoeGoe
-0. Prepare downloaded model & config file, which are named `G_latest.pth` and `moegoe_config.json`, respectively.
-1. Follow [MoeGoe](https://github.com/CjangCjengh/MoeGoe) page instructions to install, configure path, and use.
+## 训练日志
 
-## Looking for help?
-If you have any questions, please feel free to open an [issue](https://github.com/Plachtaa/VITS-fast-fine-tuning/issues/new) or join our [Discord](https://discord.gg/TcrjDFvm5A) server.
+原来的 `finetune_speaker_v2.py` 现在同时支持：
+
+- TensorBoard
+- SwanLab
+
+默认只开 TensorBoard。需要 SwanLab 时加：
+
+```bash
+--use_swanlab True
+--swanlab_project vits-fast-fine-tuning
+--swanlab_name genshin_zh_en_16k
+--swanlab_mode local
+```
+
+`swanlab_mode` 可选：
+
+```text
+online    云端
+local     本地
+offline   离线
+disabled  关闭 SwanLab
+```
+
+## 推理
+
+原版的 Gradio 页面：
+
+```bash
+python VC_inference.py --model_dir ./OUTPUT_MODEL/G_latest.pth --config_dir ./OUTPUT_MODEL/config.json
+```
+
+命令行合成：
+
+```bash
+python cmd_inference.py -m 模型路径 -c config.json -o 输出目录 -t "你好" -s 音色名
+```
+
+16 kHz 配方自己的推理支持两种入口：
+
+```bash
+# 直接调用 Python
+.venv/bin/python recipes/genshin_zh_en_16k_pretrain/04_infer.py --speaker 魔女M --text "你好"
+
+# 或使用包装脚本
+bash recipes/genshin_zh_en_16k_pretrain/infer.sh --speaker 魔女M --text "你好"
+```
+
+## 文档
+
+- `recipes/genshin_zh_en_16k_pretrain/README.md`：原神中英 16 kHz 预训练配方
+- `DATA.MD`：微调数据格式
+- `LOCAL.md`：本地环境、编译、训练和推理
+
+英文 README 已移除，后续以中文文档为准。
