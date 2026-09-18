@@ -2,3 +2,8 @@
 data/
 output/
 *.log
+
+# Experiment run artifacts
+experiments/**/swanlab/
+experiments/**/runs/
+experiments/**/*.pid
