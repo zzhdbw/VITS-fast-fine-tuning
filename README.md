@@ -98,12 +98,7 @@ Python 依赖：
 pip install -r requirements.txt
 ```
 
-当前仓库里的 `.venv` 使用 Python 3.11。  
-有一个坑：`requirements.txt` 里如果还是 `Cython==0.29.21`，在 Python 3.11 下编译 `monotonic_align` 会报 `longintrepr.h` 找不到。把 Cython 换成较新的版本即可：
-
-```bash
-pip install "Cython==0.29.36"
-```
+当前仓库里的 `.venv` 使用 Python 3.11。`requirements.txt` 已固定 `Cython==0.29.36`，避免 Python 3.11 下编译 `monotonic_align` 时提示 `longintrepr.h` 找不到。
 
 PyTorch 建议单独装和机器 CUDA 匹配的 GPU 版本。
 
