@@ -54,6 +54,6 @@ echo "Log : recipes/bznsyp_zh_16k_pretrain/output/bznsyp_zh_16k/nohup_train.log"
   -c recipes/bznsyp_zh_16k_pretrain/data/bznsyp_zh_16k/config.json \
   -o recipes/bznsyp_zh_16k_pretrain/output/bznsyp_zh_16k/infer \
   -l 简体中文 \
-  -t "你好，这是 BZNSYP 中文单人音色的测试语音。" \
+  -t "你好，这是 BZNSYP 中文单人音色的测试语音。are you happy?" \
   -s BZNSYP \
   -on test
