@@ -1,10 +1,12 @@
 # VITS Fast Fine-tuning
 
-这个仓库现在有三条使用路线：
+这个仓库现在有五条使用路线：
 
 1. **原神中文/英文 16 kHz 预训练配方**：从原神语音数据整理、重采样、清洗文本，到训练和试听，都在 `recipes/genshin_zh_en_16k_pretrain/` 下。
 2. **BZNSYP 中文单人 16 kHz 预训练配方**：使用 `/mnt/afs/datasets/TTS/BZNSYP` 做单人音色预训练，默认 1000 epoch。
-3. **原来的 VITS 快速微调流程**：准备自己的音频或视频数据，基于 CJE / CJ / C 底模微调，然后做 TTS 或声线转换。
+3. **LJSpeech 英文单人 16 kHz 预训练配方**：使用 `/mnt/afs/datasets/TTS/LJSpeech-1.1` 做英文单人音色预训练，复用原本的 `cjke_cleaners2` + 68 音素词表，默认 1000 epoch。
+4. **LJSpeech + BZNSYP 中英双语 16 kHz 预训练配方**：同时使用 LJSpeech 和 BZNSYP，共享一套 `cjke_cleaners2` + 68 音素词表，训练双说话人、中英双语底模。
+5. **原来的 VITS 快速微调流程**：准备自己的音频或视频数据，基于 CJE / CJ / C 底模微调，然后做 TTS 或声线转换。
 
 如果你是第一次用，建议先看第 1 条。它目前是仓库里最完整、最容易复现的一条链路。
 
@@ -82,7 +84,71 @@ bash recipes/bznsyp_zh_16k_pretrain/run.sh
 bash recipes/bznsyp_zh_16k_pretrain/infer.sh "你好，这是 BZNSYP 单人音色。" test
 ```
 
-## 路线三：原来的 VITS 快速微调
+## 路线三：LJSpeech 英文单人 16 kHz 预训练
+
+使用 `/mnt/afs/datasets/TTS/LJSpeech-1.1` 训练英文单人音色，默认 1000 个 epoch。
+
+LJSpeech 是纯英文数据集，但仓库原本没有纯 ASCII 英文字符词表；对英文可直接复用的只有原本的
+`cjke_cleaners2` + `text/symbols.py` 中激活的 68 个 IPA 音素符号。本配方不新增 cleaner/词表，
+直接复用这套原始前端。
+
+详细说明在：
+
+```text
+recipes/ljspeech_en_16k_pretrain/README.md
+```
+
+常用入口：
+
+```bash
+# 默认执行：数据预处理 -> 1000 epoch 后台训练 -> 测试推理
+# 没有 G_latest.pth 时，请先注释掉 run.sh 的 Step 3
+bash recipes/ljspeech_en_16k_pretrain/run.sh
+```
+
+训练完成后也可以单独推理：
+
+```bash
+bash recipes/ljspeech_en_16k_pretrain/infer.sh "Hello, this is an LJSpeech English test." test
+```
+
+## 路线四：LJSpeech + BZNSYP 中英双语 16 kHz 预训练
+
+同时使用：
+
+- `/mnt/afs/datasets/TTS/LJSpeech-1.1`：英文单人，`LJSpeech`，speaker 0；
+- `/mnt/afs/datasets/TTS/BZNSYP`：中文单人，`BZNSYP`，speaker 1。
+
+两个数据集都复用仓库原本的 `cjke_cleaners2` + 68 音素词表，分别通过
+`[EN]` / `[ZH]` 标签转成同一套 IPA 符号，因此可以训练一个双说话人、中英双语的
+16 kHz 预训练模型。
+
+详细说明在：
+
+```text
+recipes/ljspeech_bznsyp_zh_en_16k_pretrain/README.md
+```
+
+常用入口：
+
+```bash
+# 默认：准备数据 -> 后台 1000 epoch 训练 -> 如果已有 G_latest.pth 则追加中英推理
+bash recipes/ljspeech_bznsyp_zh_en_16k_pretrain/run.sh
+```
+
+单独推理：
+
+```bash
+# 英文，LJSpeech 音色
+bash recipes/ljspeech_bznsyp_zh_en_16k_pretrain/infer.sh \
+  "Hello, this is a bilingual test." test English LJSpeech
+
+# 中文，BZNSYP 音色
+bash recipes/ljspeech_bznsyp_zh_en_16k_pretrain/infer.sh \
+  "你好，这是中英双语测试。" test 简体中文 BZNSYP
+```
+
+## 路线五：原来的 VITS 快速微调
 
 原来的脚本还在：
 
