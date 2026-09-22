@@ -1,0 +1,9 @@
+# Recipe-generated data and outputs
+data/
+output/
+*.log
+*.pth
+
+# Python
+__pycache__/
+*.py[cod]
